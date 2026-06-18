@@ -1,0 +1,30 @@
+{
+  "name": "order-matching-engine",
+  "version": "1.0.0",
+  "description": "A distributed real-time order matching engine with price-time priority algorithm",
+  "main": "server.js",
+  "scripts": {
+    "dev": "npx nodemon server.js",
+    "start": "node server.js",
+    "worker": "node worker.js",
+    "db:generate": "npx drizzle-kit generate",
+    "db:push": "npx drizzle-kit push"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.3",
+    "bullmq": "^5.78.1",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^4.1.1",
+    "ioredis": "^5.11.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.7.0",
+    "pg": "^8.21.0",
+    "socket.io": "^4.8.3"
+  }
+}

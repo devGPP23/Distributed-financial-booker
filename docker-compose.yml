@@ -1,0 +1,32 @@
+
+services:
+  # Database 1: The Permanent Trade Ledger
+  postgres:
+    image: postgres:15-alpine
+    container_name: matching_engine_postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: matching_engine_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Database 2: High-Speed Cache + Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: matching_engine_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+  # Database 3 (MongoDB) is hosted on MongoDB Atlas (cloud) — no Docker needed.
+
+volumes:
+  pgdata:
+  redisdata:
+
