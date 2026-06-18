@@ -1,4 +1,4 @@
-const { btcOrderBook } = require('../engine');
+const { getOrderBook } = require('../engine');
 const redis = require('../config/redis');
 
 /**
@@ -13,29 +13,34 @@ const redis = require('../config/redis');
  */
 exports.placeOrder = async (req, res) => {
     try {
+        // Support dynamic symbol, fallback to BTC
+        const symbol = req.body.symbol ? req.body.symbol.toUpperCase() : "BTC";
         const { side, price, quantity } = req.body;
-
-        // Boilerplate Validation
         if (!side || !price || !quantity) {
             return res.status(400).json({ error: "Missing required fields" });
         }
+        
+        const orderBook = getOrderBook(symbol);
+        // Pass to order add karne wale function ko bhej diye
+        orderBook.addOrder(side, symbol, price, quantity); // matching and sorting yahi pe hogyi
 
-        // 1. Pass to Engine (In-Memory Processing is extremely fast)
-        btcOrderBook.addOrder(side, "BTC", price, quantity);
-
-        // 2. CORE LOGIC TO WRITE: Cache the updated state to Redis
-        // Google Interview Focus: How do we serialize this efficiently? How do we ensure consistency?
-        // TODO: Write code to save `btcOrderBook.bids` and `btcOrderBook.asks` to Redis
-
-        // 3. CORE LOGIC TO WRITE: Publish an event to Redis Pub/Sub
-        // Google Interview Focus: This enables a decoupled event-driven architecture. WebSocket servers will listen to this.
-        // TODO: Write code to publish the latest order book state to a channel (e.g., 'ORDER_BOOK_UPDATE')
-
-        // Boilerplate Response
+    //  Interview : We use JSON.stringify because Redis only stores strings! remember 
+        // Cache the updated state to Redis
+        const orderBookState = JSON.stringify({
+            bids: orderBook.bids,
+            asks: orderBook.asks,
+            trades : orderBook.trades
+        });
+        await redis.set(`orderbook_${symbol}`, orderBookState);
+            // REDIS PUB/SUB - signal bhej diye ki orderbook update ho gya hai 
+        // Publish an event to Redis Pub/Sub
+        //  This decouples the engine from the WebSockets. 
+        // We broadcast to the 'ORDER_BOOK_UPDATE' channel so all servers know instantly.
+        await redis.publish(`ORDER_BOOK_UPDATE_${symbol}`, orderBookState);
+ // publishing does is that it sends a signal to all the connected clients through the channel name  which is ORDER_BOOK_UPDATE in our case that there is a new update in the order book so that the clients can update their order book and show it to the users
         res.status(201).json({
             message: "Order placed successfully",
-            // We return the trades that just happened (if any)
-            trades: btcOrderBook.trades 
+            trades: orderBook.trades  // ye sb trade hue h
         });
 
     } catch (error) {
@@ -46,16 +51,20 @@ exports.placeOrder = async (req, res) => {
 
 exports.getOrderBook = async (req, res) => {
     try {
-        // CORE LOGIC TO WRITE: Fetch the order book from Redis instead of RAM.
-        // Google Interview Focus: Why not just return `btcOrderBook.bids` directly?
-        // Answer: Because in a microservices architecture, the API server serving GET requests 
-        // might be on a different server than the matching engine! Redis acts as our centralized, high-speed cache.
+        const symbol = req.query.symbol ? req.query.symbol.toUpperCase() : "BTC";
+        // CORE LOGIC: Fetch the order book from Redis instead of RAM.
+        // Google Interview Focus: We fetch from the cache so we don't overload the matching engine!
+        const cachedBook = await redis.get(`orderbook_${symbol}`);
+        if (cachedBook) {
+            // We must JSON.parse() to turn the Redis string back into a Javascript Object
+            return res.json(JSON.parse(cachedBook));
+        }
         
-        // TODO: Write code to fetch from Redis. If Redis is down, fallback to memory (btcOrderBook).
-
+        const orderBook = getOrderBook(symbol);
+        // Fallback just in case Redis is completely empty
         res.json({
-            bids: btcOrderBook.bids, // Replace this with Redis data
-            asks: btcOrderBook.asks  // Replace this with Redis data
+            bids: orderBook.bids, 
+            asks: orderBook.asks  
         });
     } catch (error) {
         console.error(error);

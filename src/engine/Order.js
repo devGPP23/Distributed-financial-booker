@@ -7,6 +7,7 @@ const crypto = require('crypto');
      * @param {number} price - The limit price
      * @param {number} quantity - The number of shares
      */
+// define  what things a order has in it 
 class Order {
     constructor(side, symbol, price, quantity) {
         this.id = crypto.randomUUID();

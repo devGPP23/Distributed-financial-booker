@@ -1,9 +1,17 @@
 const OrderBook = require('./OrderBook');
 
-// This acts as our in-memory singleton instance for the BTC order book.
-// In a highly distributed architecture, we might have different nodes managing different symbols.
-const btcOrderBook = new OrderBook("BTC");
+// Registry to hold all active order books by symbol
+const orderBooks = {};
+
+// Helper to get or create an order book
+const getOrderBook = (symbol) => {
+    const upperSymbol = symbol.toUpperCase();
+    if (!orderBooks[upperSymbol]) {
+        orderBooks[upperSymbol] = new OrderBook(upperSymbol);
+    }
+    return orderBooks[upperSymbol];
+};
 
 module.exports = {
-    btcOrderBook
+    getOrderBook
 };

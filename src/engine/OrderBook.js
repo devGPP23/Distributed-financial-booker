@@ -1,22 +1,17 @@
 const Order = require('./Order');
-
 /**
  * The core matching engine data structure.
  * This lives entirely in memory (RAM) for maximum speed.
- */
+ */ 
+// define what the orderbook contains when new order comes in 
 class OrderBook {
     constructor(symbol) {
         this.symbol = symbol;
-        
-        // Bids (Buy orders) and Asks (Sell orders) start as empty arrays
-        this.bids = []; 
+        this.bids = []; // empty arrays of bids and asks
         this.asks = []; 
         this.trades = []; 
     }
-
-    /**
-     * Sorts the order book according to Price-Time Priority.
-     */
+     // Sorts the order book according to Price-Time Priority.
     sortBook() {
         // BIDS (Buyers): Highest price first. If tied, oldest timestamp first.
         this.bids.sort((a, b) => {
@@ -62,11 +57,11 @@ class OrderBook {
         }
         // Add the new trades to our historical ledger
         this.trades.push(...newTrades);
-        
         // Return the trades we just made so the API can tell the users!
         return newTrades;
     }
-    // We will write addOrder() next!
+    // adding order matlab usko sort karana and match karana ki kaise hota hai
+
     addOrder(side,symbol,price,quantity){
         const order = new Order(side,symbol,price,quantity);
         if(side ==="BUY"){

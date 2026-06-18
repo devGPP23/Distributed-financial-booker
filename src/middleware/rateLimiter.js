@@ -3,7 +3,6 @@ const redis = require('../config/redis');
 /**
  * Token Bucket Rate Limiter using Redis.
  * This is an elite algorithmic approach to protecting APIs.
- * 
  * Rules:
  * - A user starts with a bucket of tokens (e.g., 5 tokens).
  * - Every request they make costs 1 token.
