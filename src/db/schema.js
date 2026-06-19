@@ -1,4 +1,5 @@
-const { pgTable, serial, varchar, decimal, integer, timestamp } = require('drizzle-orm/pg-core');
+const { pgTable, serial, varchar, decimal, integer, timestamp, text } = require('drizzle-orm/pg-core');
+
 /**
  * The Trade Ledger — Every executed trade is permanently recorded here.
  * 
@@ -20,4 +21,22 @@ const trades = pgTable('trades', {
   executedAt: timestamp('executed_at').defaultNow().notNull(),
 });
 
-module.exports = { trades };
+// User accounts — stored in Postgres for transactional consistency with trades
+const usersTable = pgTable('users', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  password: text('password').notNull(),   // hashed password
+  salt: text('salt').notNull(),           // unique salt per user
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Session tracking — maps a session token to a user
+const userSessionsTable = pgTable('user_sessions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  sessionToken: text('session_token').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+module.exports = { trades, usersTable, userSessionsTable };
