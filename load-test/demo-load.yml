@@ -1,0 +1,36 @@
+# Demo load test - safe for recording a UI demo
+# Sends ~200 orders over 20 seconds (enough to see live action)
+
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 20
+      arrivalRate: 5
+      name: "Demo Load - 5 users/sec for 20 sec"
+
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer test-token"
+
+scenarios:
+  - name: "Trading Bot"
+    flow:
+      - loop:
+          - post:
+              url: "/api/order"
+              json:
+                side: "BUY"
+                type: "LIMIT"
+                symbol: "BTC"
+                price: "{{ $randomNumber(45000, 50000) }}"
+                quantity: "{{ $randomNumber(1, 10) }}"
+          - post:
+              url: "/api/order"
+              json:
+                side: "SELL"
+                type: "LIMIT"
+                symbol: "BTC"
+                price: "{{ $randomNumber(45000, 50000) }}"
+                quantity: "{{ $randomNumber(1, 10) }}"
+        count: 5

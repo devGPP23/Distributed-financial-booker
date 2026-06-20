@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "npx nodemon server.js",
     "start": "node server.js",
-    "worker": "node worker.js",
+    "worker": "node src/workers/tradeWorker.js",
     "db:generate": "npx drizzle-kit generate",
-    "db:push": "npx drizzle-kit push"
+    "db:push": "npx drizzle-kit push",
+    "load:test": "npx artillery run load-test/artillery.yml --output load-test/report.json",
+    "load:report": "npx artillery report load-test/report.json"
   },
   "author": "",
   "license": "ISC",
@@ -26,5 +28,8 @@
     "mongoose": "^9.7.0",
     "pg": "^8.21.0",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "artillery": "^2.0.33"
   }
 }

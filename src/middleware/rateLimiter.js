@@ -1,24 +1,16 @@
 const redis = require('../config/redis');
-
-/**
- * Token Bucket Rate Limiter using Redis.
- * This is an elite algorithmic approach to protecting APIs.
- * Rules:
- * - A user starts with a bucket of tokens (e.g., 5 tokens).
- * - Every request they make costs 1 token.
- * - The bucket refills at a certain rate (e.g., 1 token per second).
- * - If the bucket is empty (0 tokens), they get HTTP 429 (Too Many Requests).
+/*
+ Token Bucket Rate Limiter using Redis to protecting APIs.
+ A user starts with a bucket of tokens (e.g., 5 tokens)
+  If the bucket is empty (0 tokens), they get HTTP 429 (Too Many Requests).
  */
 const rateLimiter = async (req, res, next) => {
   try {
-    // Identify the user. In production, this might be a JWT ID.
-    // For this project, we'll use their IP address to block spam bots.
-    const ipAddress = req.ip || req.connection.remoteAddress;
+    // ip address is unique for particular device hence it is safer to use
+    const ipAddress = req.headers['x-forwarded-for'] || req.ip || req.connection.remoteAddress;
     const bucketKey = `rate_limit:bucket:${ipAddress}`;
-    
-    // Configuration
-    const BUCKET_CAPACITY = 5; // Max burst of 5 requests
-    const REFILL_RATE_MS = 1000; // Refill 1 token every 1000ms (1 second)
+    const BUCKET_CAPACITY = parseInt(process.env.RATE_LIMIT_CAPACITY) || 2000; // 2000 is for loadtesting
+    const REFILL_RATE_MS  = parseInt(process.env.RATE_LIMIT_REFILL_MS) || 10; // Refill 1 token every 10ms (100/sec)
 
     // Check if the bucket exists in Redis
     const exists = await redis.exists(bucketKey);

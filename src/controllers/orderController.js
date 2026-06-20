@@ -1,16 +1,7 @@
 const { getOrderBook } = require('../engine');
 const redis = require('../config/redis');
 const tradeQueue = require('../queue/tradeQueue');
-/**
- * Controller: Handles incoming HTTP requests for orders.
- * 
- * ARCHITECTURE DECISION FOR INTERVIEW:
- * We decouple the HTTP layer from the matching engine. The HTTP request comes in, 
- * we pass data to the in-memory engine, and then we cache the result in Redis.
- * Why Redis?
- * 1. Read-heavy operations (like getting the current order book) shouldn't block the Node.js event loop or hit a slow DB.
- * 2. It allows us to scale out our WebSocket servers later (Pub/Sub).
- */
+// HTTP requests ke liye controller (order place karna, book get karna etc)
 exports.placeOrder = async (req, res) => {
     try {
         const symbol = req.body.symbol ? req.body.symbol.toUpperCase() : "BTC"; // default BTC
@@ -30,19 +21,15 @@ exports.placeOrder = async (req, res) => {
         }
     }
         
-    //  Interview : We use JSON.stringify because Redis only stores strings! remember 
-        // Cache the updated state to Redis
+        // Redis me orderbook cache karlo (stringify karke kyunki redis me string hi jata hai)
         const orderBookState = JSON.stringify({
             bids: orderBook.bids,
             asks: orderBook.asks,
             trades : orderBook.trades
         });
         await redis.set(`orderbook_${symbol}`, orderBookState);
-            // REDIS PUB/SUB - signal bhej diye ki orderbook update ho gya hai 
-        // Publish an event to Redis Pub/Sub This decouples the engine from the WebSockets. 
-        // We broadcast to the 'ORDER_BOOK_UPDATE' channel so all servers know instantly.
+        // Redis pub/sub se sabhi clients ko update bhej do ki naya order aya hai
         await redis.publish(`ORDER_BOOK_UPDATE_${symbol}`, orderBookState);
- // publishing does is that it sends a signal to all the connected clients through the channel name  which is ORDER_BOOK_UPDATE in our case that there is a new update in the order book so that the clients can update their order book and show it to the users
         res.status(201).json({
             message: "Order placed successfully",
             trades: orderBook.trades  // ye sb trade hue h

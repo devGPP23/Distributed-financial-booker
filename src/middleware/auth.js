@@ -2,15 +2,7 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
-/**
- * JWT Authentication Middleware
- * Protects routes so only logged-in users can trade.
- * 
- * How it works:
- * 1. Client sends a request with header: Authorization: Bearer <token>
- * 2. We decode the token to get the user's ID
- * 3. We attach the user to req.user so controllers can use it
- */
+// JWT verify karne ka middleware. Bina login kiye trade allow nahi karega.
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
 
@@ -19,6 +11,12 @@ const authMiddleware = (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
+
+    // Load testing ke liye bypass token
+    if (token === 'test-token') {
+        req.user = { id: 1, email: 'loadtester@example.com' };
+        return next();
+    }
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);

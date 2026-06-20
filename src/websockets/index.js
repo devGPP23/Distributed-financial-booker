@@ -15,8 +15,8 @@ function initWebSockets(httpServer){
             console.log(`client disconnected:${socket.id}`);
         });
     });
-// lets subscribe to pub/sub channels 
-//We use subscribe to listen to ALL symbols using a pattern (e.g. ORDER_BOOK_UPDATE_BTC)
+// pub/sub channels ko sunne ke liye
+// pattern match karke sab symbols sunenge jaise BTC, ETH
 
 subscriber.psubscribe('ORDER_BOOK_UPDATE_*',(err,count)=>{
     if(err){
@@ -26,11 +26,11 @@ subscriber.psubscribe('ORDER_BOOK_UPDATE_*',(err,count)=>{
     console.log(`Subscribed to ${count} patterns `);
 });
 
-// 3.jab route se message aya aur redis ne suna then usko broadcast karo
+// jab route se message aya aur redis ne suna then usko sabko bhej do
 subscriber.on('pmessage',(pattern,channel,message)=>{
-    // channel name looks like "ORDER_BOOK_UPDATE_ETH". Let's extract "ETH"
+    // channel ke naam se symbol (jaise ETH) nikal rahe hai
     const symbol = channel.replace('ORDER_BOOK_UPDATE_','');
-    // Broadcast the JSON data to ALL connected WebSockets
+    // sabhi connected clients ko naya data bhej do
     io.emit('orderbook_update',{
         symbol: symbol,
         data: JSON.parse(message)

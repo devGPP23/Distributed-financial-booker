@@ -1,9 +1,5 @@
 const Order = require('./Order');
-/**
- * The core matching engine data structure.
- * This lives entirely in memory (RAM) for maximum speed.
- */
-// define what the orderbook contains when new order comes in 
+// Orderbook structure jo memory (RAM) me store hota hai fast speed ke liye
 class OrderBook {
     constructor(symbol) {
         this.symbol = symbol;
@@ -11,15 +7,15 @@ class OrderBook {
         this.asks = [];
         this.trades = [];
     }
-    // Sorts the order book according to Price-Time Priority.
+    // Price aur time ke hisaab se sort karna
     sortBook() {
-        // BIDS (Buyers): Highest price first. If tied, oldest timestamp first.
+        // Buyers: Jo sabse zyada price dega wo pehle, agar same price toh jo pehle aya wo pehle
         this.bids.sort((a, b) => {
             if (b.price === a.price) return a.timestamp - b.timestamp;
             return b.price - a.price;
         });
 
-        // ASKS (Sellers): Lowest price first. If tied, oldest timestamp first.
+        // Sellers: Jo sabse kam price me bechega wo pehle, same logic
         this.asks.sort((a, b) => {
             if (a.price === b.price) return a.timestamp - b.timestamp;
             return a.price - b.price;
@@ -50,20 +46,19 @@ class OrderBook {
                     this.asks.shift(); // Removes the first element
                 }
             } else {
-                // The highest buyer refuses to pay the lowest seller's price.
-                // Since the arrays are sorted, NO OTHER matches are possible. Stop looking.
+                // Agar highest buyer bhi agree nahi kar raha, toh aage koi match nahi hoga
                 break;
             }
         }
-        // Add the new trades to our historical ledger
+        // Naye trades array me save karlo
         this.trades.push(...newTrades);
-        // Return the trades we just made so the API can tell the users!
+        // API ko trades return kardo
         return newTrades;
     }
     // adding order matlab usko sort karana and match karana ki kaise hota hai
 
     addOrder(side, symbol, price, quantity, type = "LIMIT") {
-        // If it's a MARKET order, set the price so it executes instantly against anything
+        // Market order aaya toh price Infinity ya 0 set karo taaki turant match ho
         let effectivePrice = price;
         if (type === "MARKET") {
             effectivePrice = side === "BUY" ? Infinity : 0;

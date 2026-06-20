@@ -12,6 +12,10 @@ const getOrderBook = (symbol) => {
     return orderBooks[upperSymbol];
 };
 
+// Returns all active symbol names (e.g. ['BTC','ETH'])
+const getAllSymbols = () => Object.keys(orderBooks);
+
 module.exports = {
-    getOrderBook
+    getOrderBook,
+    getAllSymbols,
 };

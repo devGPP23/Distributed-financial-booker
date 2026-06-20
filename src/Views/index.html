@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Real-time Order Matching Engine Dashboard — Live order book, trade feed, and system observability." />
+    <title>NexusTrade Engine — Live Dashboard</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" /> <!-- using inter font-->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+     <!-- Socket.io client -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <!-- Header nav bar (logo, tabs, status) -->
+    <header class="header">
+        <div class="header-left">
+            <!-- Logo mark: simple SVG bolt icon to feel like a trading platform -->
+            <div class="logo">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <path d="M13 2L4.5 13.5H11L10 22L19.5 10H13L13 2Z" fill="currentColor"/>
+                </svg>
+            </div>
+            <div>
+                <h1 class="site-title">NexusTrade</h1>
+                <span class="site-subtitle">Distributed Order Matching Engine</span>
+            </div>
+        </div>
+
+        <div class="header-center">
+            <!-- Main View Navigation -->
+            <div class="view-tabs" id="view-tabs">
+                <button class="view-tab active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
+                <button class="view-tab" data-view="tutorial" onclick="switchView('tutorial')">Tutorial Guide</button>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <!-- Live WebSocket connection badge — turns green when Socket.io connects -->
+            <div class="status-badge" id="ws-status">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">Connecting…</span>
+            </div>
+            <!-- Uptime and memory pulled from /api/stats every 2s -->
+            <div class="server-info">
+                <span>Uptime: <strong id="uptime">--</strong></span>
+                <span>RAM: <strong id="memory">--</strong></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard View -->
+    <div id="view-dashboard" class="view-container">
+        <!-- Moved symbol tabs here for the dashboard view -->
+        <div class="dashboard-controls">
+            <div class="symbol-tabs" id="symbol-tabs">
+                <button class="symbol-tab active" data-symbol="BTC" onclick="switchSymbol('BTC')">BTC/USD</button>
+                <button class="symbol-tab" data-symbol="ETH" onclick="switchSymbol('ETH')">ETH/USD</button>
+                <button class="symbol-tab" data-symbol="AAPL" onclick="switchSymbol('AAPL')">AAPL</button>
+            </div>
+        </div>
+
+        <main class="main-grid">
+
+        <!-- COLUMN 1: Live order book (Bids aur Asks) -->
+        <section class="panel" id="order-book-panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Order Book</h2>
+                <div class="panel-badge">LIVE</div>
+            </div>
+
+            <!-- Asks = sell orders. Highest ask at bottom (closest to price) -->
+            <div class="book-section">
+                <div class="book-header">
+                    <span>Price (USD)</span>
+                    <span>Quantity</span>
+                    <span>Total</span>
+                </div>
+                <!-- Asks fill from bottom → top (sellers closest to mid-price are shown first) -->
+                <div class="book-asks" id="book-asks">
+                    <div class="book-empty">Waiting for orders…</div>
+                </div>
+            </div>
+
+            <!-- Spread = best ask price - best bid price. A key market health metric -->
+            <div class="spread-bar">
+                <span class="spread-label">Spread</span>
+                <span class="spread-value" id="spread-value">—</span>
+                <span class="spread-label">Mid</span>
+                <span class="spread-value" id="mid-price">—</span>
+            </div>
+
+            <!-- Bids = buy orders. Highest bid at top (buyers willing to pay the most) -->
+            <div class="book-section">
+                <div class="book-bids" id="book-bids">
+                    <div class="book-empty">Waiting for orders…</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- COLUMN 2: Price Ticker aur Order Form -->
+        <section class="center-column">
+
+            <!-- Live price ticker at top -->
+            <div class="ticker-card panel">
+                <div class="ticker-symbol" id="ticker-symbol">BTC/USD</div>
+                <div class="ticker-price" id="ticker-price">—</div>
+                <div class="ticker-meta">
+                    <span class="ticker-label">Best Bid</span>
+                    <span class="ticker-bid" id="ticker-bid">—</span>
+                    <span class="ticker-divider">|</span>
+                    <span class="ticker-label">Best Ask</span>
+                    <span class="ticker-ask" id="ticker-ask">—</span>
+                </div>
+                <div class="ticker-trades-count">
+                    <span id="total-trades">0</span> trades matched
+                </div>
+            </div>
+
+            <!-- Market Summary Strip -->
+            <div class="market-summary">
+                <div class="summary-item">
+                    <span class="summary-label">Spread %</span>
+                    <span class="summary-value" id="spread-pct">—</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Engine Latency</span>
+                    <span class="summary-value green" id="engine-latency">—</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Orders/sec</span>
+                    <span class="summary-value" id="orders-per-sec">0</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Book Depth</span>
+                    <span class="summary-value" id="book-depth">0</span>
+                </div>
+            </div>
+
+            <!-- Order Form (POST /api/order pe call jata hai) -->
+            <div class="panel order-form-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Place Order</h2>
+                    <div class="order-type-toggle">
+                        <!-- BUY / SELL toggle buttons -->
+                        <button class="toggle-btn buy active" id="side-buy" onclick="setSide('BUY')">BUY</button>
+                        <button class="toggle-btn sell" id="side-sell" onclick="setSide('SELL')">SELL</button>
+                    </div>
+                </div>
+
+                <!-- JWT Token field — user pastes the token from /api/auth/login -->
+                <div class="form-group">
+                    <label class="form-label" for="jwt-token">JWT Token (from login)</label>
+                    <input class="form-input token-input" type="text" id="jwt-token"
+                        placeholder="Paste your Bearer token here…" />
+                </div>
+
+                <!-- Order type: LIMIT needs a price, MARKET doesn't -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="order-type">Type</label>
+                        <select class="form-input" id="order-type" onchange="togglePriceField()">
+                            <option value="LIMIT">LIMIT</option>
+                            <option value="MARKET">MARKET</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="order-symbol">Symbol</label>
+                        <select class="form-input" id="order-symbol">
+                            <option value="BTC">BTC</option>
+                            <option value="ETH">ETH</option>
+                            <option value="AAPL">AAPL</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group" id="price-field">
+                    <label class="form-label" for="order-price">Price (USD)</label>
+                    <input class="form-input" type="number" id="order-price" placeholder="e.g. 47500" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="order-quantity">Quantity</label>
+                    <input class="form-input" type="number" id="order-quantity" placeholder="e.g. 5" />
+                </div>
+
+                <!-- Submit button — green for BUY, red for SELL -->
+                <button class="submit-btn buy" id="submit-btn" onclick="placeOrder()">
+                    <span id="submit-label">Place BUY Order</span>
+                    <span class="submit-spinner hidden" id="submit-spinner">⟳</span>
+                </button>
+
+                <!-- Result message shown after API call -->
+                <div class="form-result hidden" id="form-result"></div>
+            </div>
+
+            <!-- Auth panel — Sign up & login -->
+            <div class="panel auth-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Authentication</h2>
+                    <div class="auth-tabs">
+                        <button class="auth-tab active" onclick="showAuth('login')">Login</button>
+                        <button class="auth-tab" onclick="showAuth('signup')">Sign Up</button>
+                    </div>
+                </div>
+
+                <div id="auth-login">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input class="form-input" type="email" id="login-email" placeholder="user@example.com" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input class="form-input" type="password" id="login-password" placeholder="••••••••" />
+                        </div>
+                    </div>
+                    <button class="submit-btn neutral" onclick="login()">Login & Get Token</button>
+                </div>
+
+                <div id="auth-signup" class="hidden">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Name</label>
+                            <input class="form-input" type="text" id="signup-name" placeholder="Your name" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input class="form-input" type="email" id="signup-email" placeholder="user@example.com" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input class="form-input" type="password" id="signup-password" placeholder="••••••••" />
+                    </div>
+                    <button class="submit-btn neutral" onclick="signup()">Create Account</button>
+                </div>
+                <div class="auth-result hidden" id="auth-result"></div>
+            </div>
+
+            <!-- My Orders Panel -->
+            <div class="panel my-orders-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">My Orders</h2>
+                    <span class="panel-badge" style="background: var(--yellow-dim); color: var(--yellow); border-color: var(--yellow);">SESSION</span>
+                </div>
+                <div class="my-orders-list" id="my-orders-list">
+                    <div class="book-empty">No orders placed yet in this session.</div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- COLUMN 3: Metrics aur Live Trades -->
+        <section class="right-column">
+
+            <!-- Queue Health — pulled from BullMQ via /api/stats -->
+            <div class="panel metrics-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">System Observability</h2>
+                    <div class="panel-badge">POLLING</div>
+                </div>
+
+                <div class="metrics-grid">
+                    <!-- Each metric card shows one KPI -->
+                    <div class="metric-card">
+                        <div class="metric-icon green">✓</div>
+                        <div class="metric-body">
+                            <div class="metric-value" id="q-completed">—</div>
+                            <div class="metric-label">Trades Settled (Postgres)</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon yellow">⏳</div>
+                        <div class="metric-body">
+                            <div class="metric-value" id="q-waiting">—</div>
+                            <div class="metric-label">Queue Backlog (BullMQ)</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon red">✕</div>
+                        <div class="metric-body">
+                            <div class="metric-value" id="q-failed">—</div>
+                            <div class="metric-label">Failed Jobs (Idempotency)</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon blue">⚡</div>
+                        <div class="metric-body">
+                            <div class="metric-value" id="cache-status">—</div>
+                            <div class="metric-label">Redis Cache Status</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon purple">⬆</div>
+                        <div class="metric-body">
+                            <div class="metric-value" id="asks-count">—</div>
+                            <div class="metric-label">Open Ask Orders</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon green">⬇</div>
+                        <div class="metric-body">
+                            <div class="metric-value" id="bids-count">—</div>
+                            <div class="metric-label">Open Bid Orders</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Trade Feed — populated by WebSocket events -->
+            <div class="panel trade-feed-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Live Trade Feed</h2>
+                    <div class="panel-badge ws">WS</div>
+                </div>
+                <!-- Trade rows are prepended here by JavaScript when a match happens -->
+                <div class="trade-feed" id="trade-feed">
+                    <div class="trade-empty">No trades yet. Place matching BUY and SELL orders…</div>
+                </div>
+            </div>
+
+            <!-- Architecture diagram moved to its own view -->
+
+        </section>
+    </main>
+    </div>
+
+    <!-- TUTORIAL VIEW -->
+    <div id="view-tutorial" class="view-container hidden">
+        <div class="full-page-panel panel" style="max-width: 800px; margin: 0 auto;">
+            <div class="panel-header">
+                <h2 class="panel-title">Flash Sale Engine — Documentation & Tutorial</h2>
+            </div>
+            <div class="panel-content">
+                
+                <!-- Part 1: How and What for Users -->
+                <div style="margin-bottom: 40px;">
+                    <h3 style="color: var(--text-primary); font-size: 18px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Part 1: Overview & Usage</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6;">
+                        <strong>What is this?</strong> This is a high-throughput Distributed Order Matching Engine. It is engineered to process thousands of concurrent trading requests (such as high-frequency trading or flash sales) and instantly match buyers and sellers with sub-millisecond latency using an entirely in-memory architecture.
+                    </p>
+                    <p style="color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6;">
+                        <strong>How to use the dashboard:</strong>
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.6; margin-left: 20px; margin-bottom: 12px;">
+                        <li style="margin-bottom: 6px;"><strong>Step 1:</strong> Navigate to the "Authentication" panel below, create an account (Sign Up), and log in to generate your secure JWT Token.</li>
+                        <li style="margin-bottom: 6px;"><strong>Step 2:</strong> Paste your JWT Token into the "Place Order" form above.</li>
+                        <li style="margin-bottom: 6px;"><strong>Step 3:</strong> Enter a Quantity and Price, then click the BUY or SELL button.</li>
+                        <li style="margin-bottom: 6px;"><strong>Step 4:</strong> Your order will instantly appear in the <strong>Order Book</strong>. When a BUY order's price meets or exceeds a SELL order's price, a <strong>Trade</strong> is executed and broadcasted to the "Live Trade Feed".</li>
+                    </ul>
+                </div>
+
+                <!-- Part 2: Deep dive in systems -->
+                <div>
+                    <h3 style="color: var(--text-primary); font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Part 2: System Architecture & Data Flow</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6;">
+                        What happens under the hood when a user submits an order? Here is the complete request lifecycle of our decoupled architecture:
+                    </p>
+                    <div class="flow-diagram">
+                        <!-- Row 1: User -->
+                        <div class="flow-row">
+                            <div class="flow-node flow-node--user">User / Browser</div>
+                        </div>
+                        <div class="flow-arrow">↓ <span class="flow-label">HTTP POST + JWT Token</span></div>
+
+                        <!-- Row 2: API Layer -->
+                        <div class="flow-row">
+                            <div class="flow-node flow-node--api">
+                                <strong>Express API</strong>
+                                <span class="flow-sub">/api/order &nbsp; /api/stats &nbsp; /api/auth</span>
+                            </div>
+                            <div class="flow-connector">→</div>
+                            <div class="flow-node flow-node--middleware">
+                                <strong>Middleware</strong>
+                                <span class="flow-sub">JWT Auth &bull; Rate Limiter (Redis)</span>
+                            </div>
+                        </div>
+                        <div class="flow-arrow">↓ <span class="flow-label">Validated request enters engine</span></div>
+
+                        <!-- Row 3: Matching Engine -->
+                        <div class="flow-row">
+                            <div class="flow-node flow-node--engine flow-node--wide">
+                                <strong>In-Memory Matching Engine (RAM)</strong>
+                                <span class="flow-sub">Price-Time Priority &bull; O(n) matching &bull; ~0.1ms latency</span>
+                            </div>
+                        </div>
+                        <div class="flow-arrow">↓ <span class="flow-label">If order matched &rarr; Trade created</span></div>
+
+                        <!-- Row 4: Fan-out -->
+                        <div class="flow-row flow-row--split">
+                            <div class="flow-branch">
+                                <div class="flow-node flow-node--redis">
+                                    <strong>Redis Pub/Sub</strong>
+                                    <span class="flow-sub">Publish Trade &bull; Order Updates &bull; Ticker</span>
+                                </div>
+                                <div class="flow-arrow">↓</div>
+                                <div class="flow-node flow-node--ws">
+                                    <strong>WebSocket Server</strong>
+                                    <span class="flow-sub">Socket.io &rarr; broadcasts to all clients</span>
+                                </div>
+                                <div class="flow-arrow">↓</div>
+                                <div class="flow-node flow-node--user">Live Dashboard Update</div>
+                            </div>
+
+                            <div class="flow-branch">
+                                <div class="flow-node flow-node--queue">
+                                    <strong>BullMQ Job Queue</strong>
+                                    <span class="flow-sub">Enqueue trade for async processing</span>
+                                </div>
+                                <div class="flow-arrow">↓</div>
+                                <div class="flow-node flow-node--worker">
+                                    <strong>Trade Worker</strong>
+                                    <span class="flow-sub">Background process &bull; Idempotent (SHA-256)</span>
+                                </div>
+                                <div class="flow-arrow">↓</div>
+                                <div class="flow-node flow-node--db">
+                                    <strong>PostgreSQL</strong>
+                                    <span class="flow-sub">Persistent trade ledger</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <span class="footer-text">NexusTrade Engine v1.0 — Built for Scale</span>
+        <div class="tech-stack">
+            <span class="badge">Node.js</span>
+            <span class="badge">Redis</span>
+            <span class="badge">BullMQ</span>
+            <span class="badge">PostgreSQL</span>
+            <span class="badge">Socket.io</span>
+            <span class="badge">MongoDB</span>
+        </div>
+        <span class="footer-text">Load tested with Artillery @ 1000 req/s</span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
