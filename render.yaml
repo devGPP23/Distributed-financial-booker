@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: nexustrade-engine
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: START_WORKER
+        value: "true"
+      - key: JWT_SECRET
+        value: "super-secret-key-change-in-production"
+      # The following variables will prompt you to enter them in the Render dashboard
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: MONGO_URL
+        sync: false
