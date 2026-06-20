@@ -51,8 +51,17 @@ const start = async () => {
   require('./src/config/redis');
   // WebSocket server initialize karna
   initWebSockets(server);
+
+  // Start the server
   server.listen(PORT, () => {
-    console.log(`🚀 Order Matching Engine running on port ${PORT}`);
+    console.log(`[HTTP] Server is running on port ${PORT}`);
+    
+    // Start worker in the same process if env var is set
+    // This allows us to run both Express and BullMQ on a single free Render instance
+    if (process.env.START_WORKER === 'true') {
+        console.log(`[WORKER] Starting BullMQ trade worker in the main process...`);
+        require('./src/workers/tradeWorker.js');
+    }
   });
 };
 
