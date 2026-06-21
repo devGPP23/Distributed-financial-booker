@@ -28,8 +28,8 @@ const rateLimiter = async (req, res, next) => {
 
     // Get current bucket state
     const bucket = await redis.hgetall(bucketKey);
-    let tokens = parseInt(bucket.tokens);
-    const lastRefill = parseInt(bucket.lastRefill);
+    let tokens = parseInt(bucket.tokens) || 0;
+    const lastRefill = parseInt(bucket.lastRefill) || Date.now();
     const now = Date.now();
 
     // Calculate how many tokens to add based on how much time has passed

@@ -31,7 +31,7 @@ app.use('/api/stats', statsRoutes);
 // Health check API (JSON)
 app.get('/api/health', (req, res) => {
   res.json({
-    service: 'Flash Sale Order Matching Engine',
+    service: 'Distributed Fin Book Engine',
     status: 'running',
     version: '1.0.0',
     databases: ['PostgreSQL (Ledger)', 'Redis (Order Book)', 'MongoDB (Users)'],

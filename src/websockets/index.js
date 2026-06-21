@@ -1,9 +1,7 @@
 const {Server} = require('socket.io');
 const Redis = require ('ioredis');
-const subscriber = new Redis({ // new connection to redis other than that get set wala so that dono things alag alg ho
-    host:'localhost',
-    port: 6379
-});
+require('dotenv').config();
+const subscriber = new Redis(process.env.REDIS_URL);
 // connection and initialization
 function initWebSockets(httpServer){
     const io = new Server(httpServer,{ // aise  initialize karte socket.io ko

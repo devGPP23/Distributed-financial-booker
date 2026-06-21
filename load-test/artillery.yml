@@ -1,6 +1,6 @@
 
 # ============================================================
-# Artillery Load Test — Flash Sale Engine
+# Artillery Load Test — Distributed Fin Book Engine
 # Day 6: Stress Testing & Observability
 #
 # INTERVIEW EXPLANATION:
@@ -15,9 +15,9 @@ config:
     # Create 100 virtual users over 10 seconds.
     # Each virtual user will then loop 1000 times, sending a total of 100,000 requests.
     # This prevents Windows from running out of network sockets (EADDRINUSE).
-    - duration: 10
-      arrivalRate: 10
-      name: "Massive Distributed Load (100k requests)"
+    - duration: 5
+      arrivalRate: 20
+      name: "Massive Distributed Load (1000 req/sec)"
 
   # Artillery plugins for enhanced HTML reports
   plugins:
@@ -63,6 +63,6 @@ scenarios:
               url: "/api/order/book?symbol=BTC"
               headers:
                 X-Forwarded-For: "192.168.1.{{ $randomNumber(1, 10) }}"
-        # The loop runs 334 times * 3 requests = ~1000 requests per user
-        count: 334
+        # The loop runs 17 times * 3 requests = 51 requests per user. Over 5s, 100 users -> 5100 requests.
+        count: 17
 

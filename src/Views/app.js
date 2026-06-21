@@ -319,6 +319,18 @@ async function login() {
         if (res.ok && data.token) {
             // Token form me dal do aaram ke liye
             document.getElementById('jwt-token').value = data.token;
+            
+            try {
+                const payload = JSON.parse(atob(data.token.split('.')[1]));
+                const displayName = payload.name || 'User';
+                document.getElementById('sidebar-name').textContent = displayName;
+                document.getElementById('sidebar-role').textContent = payload.email || 'Authenticated';
+                document.getElementById('sidebar-avatar').textContent = displayName.charAt(0).toUpperCase();
+            } catch (e) {
+                document.getElementById('sidebar-name').textContent = 'Authenticated User';
+                document.getElementById('sidebar-role').textContent = email;
+            }
+
             showAuthResult(resultEl, 'success',
                 `✓ Logged in! Token pasted into order form.\n${data.token.substring(0, 40)}…`
             );
@@ -428,6 +440,7 @@ async function fetchOrderBookSnapshot(symbol) {
         const res  = await fetch(`/api/order/book?symbol=${symbol}`);
         const data = await res.json();
         renderOrderBook(data.bids || [], data.asks || []);
+        updateTicker(data.bids || [], data.asks || [], data.trades || []);
         if (data.trades) {
             data.trades.slice(-5).forEach(appendTradeToFeed);
             document.getElementById('total-trades').textContent = data.trades.length;

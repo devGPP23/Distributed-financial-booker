@@ -1,6 +1,6 @@
-# ⚡ Flash Sale Order Matching Engine
+# ⚡ Distributed Fin Book Order Matching Engine
 
-> A **distributed, high-throughput trading engine** built with Node.js, demonstrating enterprise-grade patterns including CQRS, Event-Driven Architecture, Asynchronous Processing, and Real-Time Fanout — all provable under load.
+> A **super fast trading engine** built with Node.js. It handles thousands of orders per second without crashing, making it perfect for distributed financial books or crypto trading!
 
 [![Node.js](https://img.shields.io/badge/Node.js-22.x-green)](https://nodejs.org)
 [![Redis](https://img.shields.io/badge/Redis-7.x-red)](https://redis.io)
@@ -9,323 +9,152 @@
 
 ---
 
-## 🎯 Resume Bullet Points (Interview Ready)
+## 🌟 Why is this so fast?
 
-- **Designed** an in-memory Price-Time Priority order matching engine achieving **sub-millisecond trade execution**, processing 1000+ orders/sec sustained throughput
-- **Implemented** CQRS pattern using Redis as a read-replica cache, decoupling read-heavy order book queries from the matching engine's write path
-- **Built** an asynchronous event-driven trade settlement pipeline using BullMQ and PostgreSQL with **SHA-256 idempotency keys**, guaranteeing exactly-once delivery despite worker crashes
-- **Architected** a real-time fanout system using Socket.io and Redis Pub/Sub, enabling horizontal scaling of WebSocket servers across N nodes with zero code changes
-- **Benchmarked** system performance with Artillery, proving **1000+ req/s** throughput with sub-5ms P99 latency at peak load
+We built this engine to solve hard problems in a simple way. Here is how it works under the hood:
+
+*   **⚡ Lightning Fast Matching:** We keep all active orders in the server's memory (RAM) instead of a slow database. This means buyers and sellers are matched instantly!
+*   **🚀 Handles Heavy Traffic:** Powered by Node.js, the engine can easily handle a massive rush of users (like a busy financial market) without freezing.
+*   **🛡️ No Missing Trades:** Every time a trade happens, it is safely queued up and saved to PostgreSQL in the background. Even if the server restarts, no trades are ever lost or counted twice!
+*   **🔌 Live Screen Updates:** When an order happens, we instantly push the update to your screen using WebSockets. Everyone sees the changes at the exact same time without refreshing the page!
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ How it Works (Flowchart)
 
-### High-Level Overview
+Here is a simple picture of how the data flows from your browser to the database:
 
 ```mermaid
 graph TD
-    Client["🖥️ Browser / Client\n(Dashboard UI)"]
+    Client["🖥️ Your Browser\n(The Dashboard)"]
     
-    subgraph API_Layer["API Layer (Express.js)"]
-        HTTP["POST /api/order\nGET /api/order/book\nGET /api/stats"]
-        Auth["JWT Auth Middleware"]
-        RateLimit["Token Bucket\nRate Limiter"]
+    subgraph API_Layer["API Server"]
+        HTTP["Express.js API"]
+        Auth["Login Check"]
+        RateLimit["Rate Limiter\n(Stops Spam)"]
     end
     
-    subgraph Core_Engine["Core Engine (In-Memory / RAM)"]
-        Engine["Price-Time Priority\nMatching Engine"]
-        OrderBook["Order Book\n(Sorted Bids & Asks)"]
+    subgraph Core_Engine["Super Fast Memory"]
+        Engine["Matching Engine\n(Finds Deals)"]
+        OrderBook["Order Book\n(List of Bids & Asks)"]
     end
     
-    subgraph Messaging["Event Bus (Redis)"]
-        PubSub["Redis Pub/Sub\nORDER_BOOK_UPDATE_*"]
-        Cache["Redis Cache\norderbook_{symbol}"]
-        Queue["BullMQ Queue\nsave-trade"]
+    subgraph Messaging["Background Workers"]
+        PubSub["Live Broadcaster"]
+        Cache["Fast Cache (Redis)"]
+        Queue["Background Tasks (BullMQ)"]
     end
     
-    subgraph Persistence["Persistence Layer"]
-        Postgres["PostgreSQL\nTrade Ledger"]
-        Mongo["MongoDB\nUser Portfolios"]
+    subgraph Persistence["Safe Storage"]
+        Postgres["PostgreSQL Database\n(Saves Trades forever)"]
     end
     
-    subgraph RealTime["Real-Time Layer"]
-        WS["Socket.io Server\nWebSocket Connections"]
-    end
-    
-    Client -->|"REST HTTP"| RateLimit
+    Client -->|"Places Order"| RateLimit
     RateLimit --> Auth
     Auth --> HTTP
     HTTP --> Engine
     Engine --> OrderBook
-    Engine -->|"Trade matched"| Queue
-    Engine -->|"Update cache"| Cache
-    Engine -->|"Publish event"| PubSub
-    PubSub -->|"pmessage"| WS
-    WS -->|"orderbook_update"| Client
-    Queue -->|"Worker picks up job"| Postgres
-    Cache -->|"GET orderbook_BTC"| HTTP
-```
-
----
-
-### Request Lifecycle (Order Placement)
-
-```mermaid
-sequenceDiagram
-    participant C  as Client (Browser)
-    participant E  as Express API
-    participant RL as Rate Limiter (Redis)
-    participant ME as Matching Engine (RAM)
-    participant R  as Redis
-    participant B  as BullMQ Queue
-    participant W  as Worker Process
-    participant P  as PostgreSQL
-
-    C->>E: POST /api/order {side, price, qty}
-    E->>RL: Check token bucket for this IP
-    RL-->>E: ✓ Allowed (consume 1 token)
-    E->>ME: orderBook.addOrder(BUY, BTC, 47500, 5)
-    ME->>ME: sortBook() — Price-Time Priority
-    ME->>ME: matchOrders() — find BID ≥ ASK
-    ME-->>E: [{trade matched!}]
-    
-    Note over E,R: All 3 happen in parallel (Promise.all-like)
-    E->>R: SET orderbook_BTC {...}  (cache update)
-    E->>R: PUBLISH ORDER_BOOK_UPDATE_BTC {...}
-    E->>B: Queue.add('save-trade', tradeData)
-    
-    E-->>C: 201 { message: "Order placed", trades: [...] }
-    
-    Note over R,C: Real-time fanout happens async
-    R-->>W: [Pub/Sub] WebSocket server receives message
-    W-->>C: socket.emit('orderbook_update', data)
-    
-    Note over B,P: Async settlement (decoupled from HTTP response)
-    B->>W: Worker picks up job
-    W->>P: INSERT INTO trades (idempotency check)
-    P-->>W: ✓ Saved to ledger
-```
-
----
-
-## 🔑 Key Design Patterns (Interview Deep-Dive)
-
-### 1. CQRS — Command Query Responsibility Segregation
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     CQRS PATTERN                        │
-│                                                         │
-│  WRITE PATH (Commands)      READ PATH (Queries)         │
-│  ──────────────────────     ──────────────────────      │
-│  POST /api/order         →  GET /api/order/book         │
-│       ↓                          ↓                      │
-│  Matching Engine (RAM)      Redis Cache (< 1ms)         │
-│       ↓                     (No engine touch!)          │
-│  Redis Cache Update                                     │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Interview Answer**: *"The write path and read path have completely different performance characteristics. Writes need the engine's sorted in-memory state; reads just need the last known snapshot. By caching the snapshot in Redis, we serve 100,000 concurrent read requests per second without touching the engine or any database."*
-
----
-
-### 2. Event-Driven Architecture (Redis Pub/Sub)
-
-```
-                    Publisher              Subscribers
-                  ┌──────────┐           ┌──────────────┐
-  Order matched → │  Engine  │─PUBLISH──▶│ WS Server 1  │──▶ 10,000 clients
-                  └──────────┘     │     └──────────────┘
-                                   │     ┌──────────────┐
-                                   └────▶│ WS Server 2  │──▶ 10,000 clients
-                                         └──────────────┘
-                                         ┌──────────────┐
-                                         │ WS Server N  │──▶ 10,000 clients
-                                         └──────────────┘
-```
-
-**Interview Answer**: *"The engine publishes one event. Redis fans it out to all WebSocket server instances regardless of how many we have. This is how we achieve horizontal scaling — we add more WS servers without changing a single line of engine code."*
-
----
-
-### 3. Idempotent Trade Settlement (BullMQ + SHA-256)
-
-```javascript
-// The key line in tradeWorker.js:
-const tradeId = crypto.createHash('sha256')
-  .update(`${buyerId}-${sellerId}`)
-  .digest('hex');
-
-// If the worker crashes and retries, the same hash is generated.
-// Postgres UNIQUE constraint on tradeId prevents duplicate insertion.
-```
-
-**Interview Answer**: *"If the worker process crashes after matching but before inserting to Postgres, BullMQ retries the job. Without idempotency, we'd double-count the trade. With SHA-256 keying on buyerId + sellerId, the retry generates the same hash, and Postgres's unique constraint rejects the duplicate — guaranteeing exactly-once delivery."*
-
----
-
-### 4. Token Bucket Rate Limiter (Redis)
-
-```
-IP: 192.168.1.1   Bucket: [●●●●●] capacity=5 tokens
-  
-  Request 1 → ✓ [●●●●○] consume 1 token
-  Request 2 → ✓ [●●●○○] consume 1 token
-  ...
-  Request 6 → ✕ [○○○○○] HTTP 429 Too Many Requests
-  
-  After 1000ms → [●○○○○] refill 1 token
+    Engine -->|"1. Put trade in queue"| Queue
+    Engine -->|"2. Update fast cache"| Cache
+    Engine -->|"3. Tell everyone"| PubSub
+    PubSub -->|"Live update!"| Client
+    Queue -->|"Save safely"| Postgres
+    Cache -->|"Show fast order list"| HTTP
 ```
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
+Want to run this on your own computer? It's easy! Just follow these steps.
 
+### What you need first
+Make sure you have Docker installed so we can run our databases easily.
 ```bash
-# You need these running
-docker-compose up -d   # starts Redis + PostgreSQL
+# This starts up Redis and PostgreSQL for you!
+docker-compose up -d
 ```
 
-### Installation
-
+### Setup the code
 ```bash
+# Download all the required packages
 npm install
-npm run db:push        # create Postgres tables via Drizzle ORM
+
+# Setup your database tables
+npm run db:push
 ```
 
-### Running
+### Start the Servers
+You will need to open two terminal windows to run this properly.
 
 ```bash
-# Terminal 1 — Main API server
+# Terminal 1 — Start the main web server
 npm run dev
 
-# Terminal 2 — BullMQ Worker (trade settlement)
+# Terminal 2 — Start the background worker (this saves trades)
 npm run worker
-
-# Open Dashboard
-open http://localhost:3000
 ```
+
+Now open your browser and go to: **http://localhost:3000** 🎉
 
 ---
 
-## 🔥 Load Testing
+## 🔥 Stress Testing it!
 
-### Run the Artillery Stress Test
+Want to see how tough this engine is? You can run our "Artillery" stress test, which pretends to be hundreds of users clicking "Buy" and "Sell" at the same time.
 
 ```bash
-# This hammers the API with up to 1000 orders/second
+# This shoots 1000 orders per second at your server!
 npm run load:test
 
-# Generate a visual HTML report
+# Want to see a pretty report of how it went?
 npm run load:report
-# Open load-test/report.html in your browser
+# Then open load-test/report.html in your browser!
 ```
-
-### Test Phases
-
-| Phase | Duration | Load | Purpose |
-|-------|----------|------|---------|
-| Warm-up | 30s | 10 → 100 req/s | Let Node.js JIT compile hot paths |
-| Ramp-up | 30s | 100 → 500 req/s | Test linear scalability |
-| Peak    | 60s | 1000 req/s | Prove sustained throughput |
-
-### Target Metrics
-
-| Metric | Target | What it proves |
-|--------|--------|----------------|
-| P50 latency | < 2ms | Fast path (Redis cache hit) |
-| P99 latency | < 5ms | Even the slowest requests are fast |
-| Error rate | < 1% | System doesn't fall over |
-| Throughput | 1000 req/s | Can handle flash sale traffic |
 
 ---
 
-## 📡 API Reference
+## 📡 For Developers (API Guide)
 
-### Order Routes — `POST /api/order`
+If you want to build your own bot or app on top of this engine, use these API links!
+
+### 1. Place an Order
+**POST `/api/order`**
 ```json
 {
   "side":     "BUY",    // or "SELL"
   "type":     "LIMIT",  // or "MARKET"
   "symbol":   "BTC",
-  "price":    47500,    // required for LIMIT, ignored for MARKET
-  "quantity": 5
+  "price":    47500,    // How much you want to pay
+  "quantity": 5         // How many you want to buy
 }
 ```
-> Requires `Authorization: Bearer <jwt>` header
+*(You need to be logged in and send your JWT Token in the headers!)*
 
-### `GET /api/order/book?symbol=BTC`
-Returns current order book from Redis cache (no auth required).
+### 2. See the Order Book
+**GET `/api/order/book?symbol=BTC`**
+Get the live list of buyers and sellers instantly.
 
-### `GET /api/stats?symbol=BTC`
-Returns live observability metrics: queue depth, cache status, memory, uptime.
-
-### Auth — `POST /api/auth/signup` / `POST /api/auth/login`
-Standard JWT-based authentication stored in MongoDB.
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| Runtime | Node.js 22 | Single-threaded event loop — perfect for I/O-heavy workloads |
-| API Framework | Express.js v5 | Minimal overhead, maximum control |
-| In-Memory Engine | Vanilla JS Arrays | RAM is 100x faster than any DB |
-| Cache + Message Broker | Redis (ioredis) | Sub-millisecond reads + Pub/Sub fanout |
-| Async Queue | BullMQ | Reliable job processing backed by Redis |
-| Trade Ledger | PostgreSQL + Drizzle ORM | ACID compliance for financial data |
-| User Auth | MongoDB + JWT | Flexible document store for user profiles |
-| Real-Time | Socket.io | WebSocket abstraction with fallback support |
-| Load Testing | Artillery | Modern, scriptable load testing |
+### 3. See Server Health
+**GET `/api/stats?symbol=BTC`**
+See how fast the engine is running and how many trades are queued up.
 
 ---
 
-## 📁 Project Structure
+## 📁 Project Folders Explained
+
+Here is where everything lives in the code:
 
 ```
-flash-sale-engine/
-├── server.js                    # Entry point, route mounting, static serving
-├── public/                      # Dashboard UI (served statically)
-│   ├── index.html               # Main dashboard
-│   ├── style.css                # Design system + components
-│   └── app.js                   # WebSocket client + REST polling + forms
+distributed-fin-book/
+├── server.js                    # The main starting point of the app
+├── public/                      # The Dashboard code (HTML/CSS)
 ├── src/
-│   ├── engine/
-│   │   ├── OrderBook.js         # Price-Time Priority matching algorithm
-│   │   ├── Order.js             # Order data model
-│   │   └── index.js             # Order book registry (symbol → OrderBook)
-│   ├── routes/
-│   │   ├── orderRoutes.js       # POST /api/order, GET /api/order/book
-│   │   ├── statsRoutes.js       # GET /api/stats (observability)
-│   │   └── users.router.js      # POST /api/auth/login, /signup
-│   ├── controllers/
-│   │   └── orderController.js   # Business logic: place, get, cancel order
-│   ├── workers/
-│   │   └── tradeWorker.js       # BullMQ worker: saves trades to Postgres
-│   ├── queue/
-│   │   └── tradeQueue.js        # BullMQ queue definition
-│   ├── websockets/
-│   │   └── index.js             # Socket.io server + Redis Pub/Sub subscriber
-│   ├── middleware/
-│   │   ├── auth.js              # JWT verification middleware
-│   │   └── rateLimiter.js       # Token bucket rate limiter (Redis)
-│   ├── config/
-│   │   ├── redis.js             # ioredis client (shared connection)
-│   │   ├── postgres.js          # Drizzle ORM + pg connection pool
-│   │   └── mongo.js             # Mongoose connection
-│   └── db/
-│       └── schema.js            # Drizzle schema (trades, users tables)
-├── load-test/
-│   ├── artillery.yml            # Load test configuration (3 phases)
-│   └── report.json              # Generated after running npm run load:test
-└── docker-compose.yml           # Redis + PostgreSQL local setup
+│   ├── engine/                  # The super fast matching algorithm!
+│   ├── routes/                  # API URLs (like /api/order)
+│   ├── controllers/             # The logic for placing orders
+│   ├── workers/                 # The background worker saving to Postgres
+│   ├── websockets/              # The live update broadcaster
+│   └── config/                  # Database connections
+└── docker-compose.yml           # Runs Postgres and Redis
 ```
-
----
-
-*Built as a technical demonstration of distributed systems patterns for senior backend engineering interviews.*
