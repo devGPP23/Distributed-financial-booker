@@ -30,24 +30,21 @@ config:
       # Our new bypass token to fix the 401 Unauthorized errors
       Authorization: "Bearer test-token"
 
-# ============================================================
-# SCENARIOS: What each virtual user actually does
-# ============================================================
+# What each virtual user actually does
 scenarios:
   - name: "Trading Bot"
     flow:
-      # We loop 1000 times per virtual user (100 users * 1000 = 100,000 total requests)
+      #We loop 1000 times per virtual user (100 users * 1000 = 100,000 total requests)
       - loop:
           - post:
               url: "/api/order"
               headers:
-                # Spoofing the 10 IPs the user requested
                 X-Forwarded-For: "192.168.1.{{ $randomNumber(1, 10) }}"
               json:
                 side: "BUY"
                 type: "LIMIT"
-                symbol: "BTC"
-                price: "{{ $randomNumber(45000, 50000) }}"
+                symbol: "ETH"
+                price: "{{ $randomNumber(2500, 3500) }}"
                 quantity: "{{ $randomNumber(1, 10) }}"
           - post:
               url: "/api/order"
@@ -56,11 +53,11 @@ scenarios:
               json:
                 side: "SELL"
                 type: "LIMIT"
-                symbol: "BTC"
-                price: "{{ $randomNumber(45000, 50000) }}"
+                symbol: "ETH"
+                price: "{{ $randomNumber(2500, 3500) }}"
                 quantity: "{{ $randomNumber(1, 10) }}"
           - get:
-              url: "/api/order/book?symbol=BTC"
+              url: "/api/order/book?symbol=ETH"
               headers:
                 X-Forwarded-For: "192.168.1.{{ $randomNumber(1, 10) }}"
         # The loop runs 17 times * 3 requests = 51 requests per user. Over 5s, 100 users -> 5100 requests.
