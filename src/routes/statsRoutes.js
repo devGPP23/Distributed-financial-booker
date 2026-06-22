@@ -11,15 +11,23 @@ router.get('/', async (req, res) => {
         const symbol = req.query.symbol ? req.query.symbol.toUpperCase() : 'BTC';
         const orderBook = getOrderBook(symbol);
 
-        // Queue mein kitne jobs bache hai ya fail hue check karlo
-        const [waiting, completed, failed] = await Promise.all([
-            tradeQueue.getWaitingCount(),
-            tradeQueue.getCompletedCount(),
-            tradeQueue.getFailedCount(),
-        ]);
+        // Helper: race any promise against a timeout so we never hang
+        const withTimeout = (promise, ms, fallback) =>
+            Promise.race([promise, new Promise(resolve => setTimeout(() => resolve(fallback), ms))]);
 
-        // Redis se orderbook ka cache nikal rahe hai
-        const cachedRaw = await redis.get(`orderbook_${symbol}`);
+        // Queue mein kitne jobs bache hai ya fail hue check karlo (3s timeout)
+        const [waiting, completed, failed] = await withTimeout(
+            Promise.all([
+                tradeQueue.getWaitingCount(),
+                tradeQueue.getCompletedCount(),
+                tradeQueue.getFailedCount(),
+            ]),
+            3000,
+            [0, 0, 0]  // fallback if Redis/BullMQ is unreachable
+        );
+
+        // Redis se orderbook ka cache nikal rahe hai (3s timeout)
+        const cachedRaw = await withTimeout(redis.get(`orderbook_${symbol}`), 3000, null);
         const cached = cachedRaw ? JSON.parse(cachedRaw) : null;
 
         // UI ko jo data chahiye wo sab yahan yha h
