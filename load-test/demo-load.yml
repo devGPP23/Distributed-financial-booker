@@ -1,5 +1,3 @@
-# Demo load test - safe for recording a UI demo
-# Sends ~200 orders over 20 seconds (enough to see live action)
 
 config:
   target: "http://localhost:3000"

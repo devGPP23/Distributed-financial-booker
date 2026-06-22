@@ -23,9 +23,5 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    # You can add tests here later if you write any Jest/Mocha tests!
-    # - name: Run tests
-    #   run: npm test
-
     - name: Build Docker Image
       run: docker build -t flash-sale-engine .

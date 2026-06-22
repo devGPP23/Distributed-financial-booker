@@ -1,40 +1,24 @@
 
-# ============================================================
-# Artillery Load Test — Distributed Fin Book Engine
-# Day 6: Stress Testing & Observability
-#
-# INTERVIEW EXPLANATION:
-# We ramp from 100 req/s to 1000 req/s to mimic a real flash
-# sale scenario (sudden surge of buyers). This proves our system
-# doesn't degrade under load.
-# ============================================================
-
 config:
-  target: "http://localhost:3000"  # Our Express server
+  target: "https://nexustrade-engine.onrender.com"
+  http:
+    timeout: 30
   phases:
-    # Create 100 virtual users over 10 seconds.
-    # Each virtual user will then loop 1000 times, sending a total of 100,000 requests.
-    # This prevents Windows from running out of network sockets (EADDRINUSE).
     - duration: 5
       arrivalRate: 20
       name: "Massive Distributed Load (1000 req/sec)"
 
-  # Artillery plugins for enhanced HTML reports
   plugins:
     expect: {}
 
-  # Default headers applied to ALL requests
   defaults:
     headers:
       Content-Type: "application/json"
-      # Our new bypass token to fix the 401 Unauthorized errors
       Authorization: "Bearer test-token"
 
-# What each virtual user actually does
 scenarios:
   - name: "Trading Bot"
     flow:
-      #We loop 1000 times per virtual user (100 users * 1000 = 100,000 total requests)
       - loop:
           - post:
               url: "/api/order"
@@ -60,6 +44,5 @@ scenarios:
               url: "/api/order/book?symbol=ETH"
               headers:
                 X-Forwarded-For: "192.168.1.{{ $randomNumber(1, 10) }}"
-        # The loop runs 17 times * 3 requests = 51 requests per user. Over 5s, 100 users -> 5100 requests.
         count: 17
 
