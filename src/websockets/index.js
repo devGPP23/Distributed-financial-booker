@@ -1,7 +1,16 @@
 const {Server} = require('socket.io');
 const Redis = require ('ioredis');
 require('dotenv').config();
-const subscriber = new Redis(process.env.REDIS_URL);
+const subscriber = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    retryStrategy(times) {
+        return Math.min(times * 200, 5000);
+    },
+});
+subscriber.on('error', () => {
+    // Silently handle reconnection errors, don't crash
+});
 // connection and initialization
 function initWebSockets(httpServer){
     const io = new Server(httpServer,{ // aise  initialize karte socket.io ko

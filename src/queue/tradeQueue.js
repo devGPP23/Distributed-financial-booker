@@ -16,6 +16,6 @@ function getRedisConnection() {
 }
 
 const tradeQueue = new Queue('save-trade', {
-    connection: getRedisConnection()
+    connection: { ...getRedisConnection(), maxRetriesPerRequest: null, enableReadyCheck: false }
 });
 module.exports = tradeQueue;

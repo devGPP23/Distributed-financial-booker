@@ -31,7 +31,7 @@ const worker = new Worker('save-trade', async (job) => {
         quantity,
     });
 }, {
-    connection: getRedisConnection()
+    connection: { ...getRedisConnection(), maxRetriesPerRequest: null, enableReadyCheck: false }
 });
 
 worker.on('error', err => {
