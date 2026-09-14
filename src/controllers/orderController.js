@@ -1,6 +1,11 @@
 const { getOrderBook } = require('../engine');
 const redis = require('../config/redis');
 const tradeQueue = require('../queue/tradeQueue');
+
+// Helper to prevent hanging requests if Redis gets stuck
+const withTimeout = (promise, ms, fallback) =>
+    Promise.race([promise, new Promise(resolve => setTimeout(() => resolve(fallback), ms))]);
+
 // HTTP requests ke liye controller (order place karna, book get karna etc)
 exports.placeOrder = async (req, res) => {
     try {
@@ -27,9 +32,9 @@ exports.placeOrder = async (req, res) => {
             asks: orderBook.asks,
             trades : orderBook.trades
         });
-        await redis.set(`orderbook_${symbol}`, orderBookState);
+        await withTimeout(redis.set(`orderbook_${symbol}`, orderBookState), 1000, null);
         // Redis pub/sub se sabhi clients ko update bhej do ki naya order aya hai
-        await redis.publish(`ORDER_BOOK_UPDATE_${symbol}`, orderBookState);
+        await withTimeout(redis.publish(`ORDER_BOOK_UPDATE_${symbol}`, orderBookState), 1000, null);
         res.status(201).json({
             message: "Order placed successfully",
             trades: orderBook.trades  // ye sb trade hue h
@@ -44,7 +49,7 @@ exports.placeOrder = async (req, res) => {
 exports.getOrderBook = async (req, res) => {
     try {
         const symbol = req.query.symbol ? req.query.symbol.toUpperCase() : "BTC";
-        const cachedBook = await redis.get(`orderbook_${symbol}`);
+        const cachedBook = await withTimeout(redis.get(`orderbook_${symbol}`), 1000, null);
         if (cachedBook) {
             return res.json(JSON.parse(cachedBook));
         }
@@ -52,7 +57,8 @@ exports.getOrderBook = async (req, res) => {
         const orderBook = getOrderBook(symbol);
         res.json({
             bids: orderBook.bids, 
-            asks: orderBook.asks  
+            asks: orderBook.asks,
+            trades: orderBook.trades
         });
     } catch (error) {
         console.error(error);
